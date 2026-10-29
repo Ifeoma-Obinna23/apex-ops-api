@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      fail_demo:
+        description: "Run the intentional failing test (proves CI blocks the release)"
+        type: boolean
+        default: false
+
+# Least privilege: every job can only read the repo unless it asks for more
+permissions:
+  contents: read
+
+jobs:
+  # ---------- Gate 1: lint + tests ----------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check app tests
+
+      - name: Run tests
+        env:
+          FAIL_DEMO: ${{ inputs.fail_demo && '1' || '0' }}
+        run: pytest -v --junitxml=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+
+  # ---------- Gate 2: build, smoke test, scan, publish ----------
+  build:
+    needs: test # never runs if lint or any test fails
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # only this job may push images
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Work out image name and version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="sha-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "Image: ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg APP_VERSION=${{ steps.ver.outputs.version }} \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            -t ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }} .
+
+      - name: Smoke test with Docker Compose (real Postgres)
+        run: |
+          cp .env.example .env
+          sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 16)|" .env
+          sed -i "s|^API_IMAGE=.*|API_IMAGE=${{ steps.ver.outputs.image }}|" .env
+          sed -i "s|^API_TAG=.*|API_TAG=${{ steps.ver.outputs.version }}|" .env
+          docker compose up -d --wait --wait-timeout 90
+          curl -fsS localhost:8000/readyz
+          curl -fsS -X POST localhost:8000/tasks -H "Content-Type: application/json" -d '{"title":"ci smoke","priority":"low"}'
+          curl -fsS localhost:8000/version | grep '"${{ steps.ver.outputs.version }}"'
+
+      - name: Show logs if the smoke test failed
+        if: failure()
+        run: docker compose logs
+
+      - name: Clean up smoke test
+        if: always()
+        run: docker compose down -v
+
+      - name: Scan image (report HIGH and CRITICAL)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.65.0 image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 \
+            ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}
+
+      - name: Scan gate (fail on fixable CRITICAL)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.65.0 image --severity CRITICAL --ignore-unfixed --exit-code 1 \
+            ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}
+
+      - name: Publish to GitHub Container Registry
+        if: github.event_name == 'push'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}
+          echo "Published ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
