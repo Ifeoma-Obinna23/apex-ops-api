@@ -32,6 +32,12 @@ class MemoryStore:
     def get_task(self, task_id):
         return self.tasks.get(task_id)
 
+    def close_task(self, task_id):
+        task = self.tasks.get(task_id)
+        if task:
+            task["status"] = "closed"
+        return task
+
 
 class PostgresStore:
     def __init__(self, dsn):
@@ -80,6 +86,14 @@ class PostgresStore:
         with self._connect() as conn:
             return conn.execute(
                 "SELECT id, title, priority, status FROM tasks WHERE id = %s", (task_id,)
+            ).fetchone()
+
+    def close_task(self, task_id):
+        with self._connect() as conn:
+            return conn.execute(
+                "UPDATE tasks SET status = 'closed' WHERE id = %s "
+                "RETURNING id, title, priority, status",
+                (task_id,),
             ).fetchone()
 
 

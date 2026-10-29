@@ -135,3 +135,11 @@ def get_task(task_id: int):
     if task is None:
         raise HTTPException(status_code=404, detail="task not found")
     return task
+
+
+@app.post("/tasks/{task_id}/close")
+def close_task(task_id: int):
+    task = store.close_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    return task

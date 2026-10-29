@@ -92,3 +92,12 @@ def test_response_has_request_id_header():
 def test_intentional_failure_demo():
     r = client.get("/healthz")
     assert r.json() == {"status": "this-will-never-match"}, "Intentional failure: CI must block the release"
+
+
+# 12. v1.1.0 feature: close a task
+def test_close_task_sets_status_closed():
+    created = client.post("/tasks", json={"title": "Renew TLS cert"}).json()
+    r = client.post(f"/tasks/{created['id']}/close")
+    assert r.status_code == 200
+    assert r.json()["status"] == "closed"
+    assert client.post("/tasks/999999/close").status_code == 404
