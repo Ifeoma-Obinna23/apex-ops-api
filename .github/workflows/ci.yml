@@ -20,7 +20,7 @@ permissions:
 jobs:
   # ---------- Gate 1: lint + tests ----------
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -42,7 +42,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results
           path: test-results.xml
@@ -50,7 +50,7 @@ jobs:
   # ---------- Gate 2: build, smoke test, scan, publish ----------
   build:
     needs: test # never runs if lint or any test fails
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write # only this job may push images
