@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
@@ -66,7 +67,20 @@ app = FastAPI(title="Apex Operations API", version=APP_VERSION, lifespan=lifespa
 async def observe_requests(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     start = time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # Unhandled error (e.g. database down): log it and still count it as a 500
+        log.error(
+            "unhandled error",
+            extra={"extra_fields": {
+                "request_id": request_id,
+                "path": request.url.path,
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:200],
+            }},
+        )
+        response = JSONResponse({"detail": "internal error", "request_id": request_id}, status_code=500)
     duration = time.perf_counter() - start
     route = request.scope.get("route")
     path = route.path if route else "unmatched"

@@ -101,3 +101,16 @@ def test_close_task_sets_status_closed():
     assert r.status_code == 200
     assert r.json()["status"] == "closed"
     assert client.post("/tasks/999999/close").status_code == 404
+
+
+# 13. Database errors are logged, counted in metrics and return a clean 500
+def test_database_error_returns_500_and_is_counted(monkeypatch):
+    def broken():
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(main.store, "list_tasks", broken)
+    r = client.get("/tasks", headers={"X-Request-ID": "db-down-1"})
+    assert r.status_code == 500
+    assert r.json()["request_id"] == "db-down-1"
+    metrics = client.get("/metrics").text
+    assert 'path="/tasks",status="500"' in metrics
