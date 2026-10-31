@@ -3,6 +3,7 @@
 A small API for tracking operational tasks, packaged and operated the way a production service would be: containerised, tested and scanned in CI, released as versioned images, deployed with Docker Compose, observable, and reversible with a one-command rollback.
 
 **Author:** Ifeoma Jane Akabueze · **Assessment:** Junior DevOps Engineer, Apex AI Arabia
+
 **AI assistance:** used and disclosed in [docs/AI_USE.md](docs/AI_USE.md)
 
 ---
@@ -70,7 +71,7 @@ docker compose up -d --wait
 
 # 3. Check it
 curl -s localhost:8000/readyz      # {"status":"ready"}
-curl -s localhost:8000/version     # {"version":"1.0.0"}
+curl -s localhost:8000/version     # {"version":"1.2.0"}
 curl -s -X POST localhost:8000/tasks -H "Content-Type: application/json" \
      -d '{"title":"Rotate logs","priority":"high"}'
 curl -s localhost:8000/tasks
