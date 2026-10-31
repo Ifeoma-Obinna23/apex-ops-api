@@ -1,0 +1,31 @@
+# Container: build, non-root, healthcheck, version, JSON logs
+# Captured 2026-10-29 on WSL2 Ubuntu, Docker Engine 29.1.3 (local build of 1.0.0)
+
+$ docker run -d --name api-test -p 8000:8000 apex-ops-api:1.0.0
+8bb8d1cb5de107c0286fccf86526cae6609d6180f338ae9fbd8edf7006ce029b
+$ sleep 20
+$ curl -s localhost:8000/version
+{"version":"1.0.0"}
+$ docker exec api-test whoami
+app
+$ docker inspect -f '{{.State.Health.Status}}' api-test
+healthy
+$ docker logs api-test
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+{"time": "2026-10-29T22:08:03+0000", "level": "INFO", "message": "startup complete", "version": "1.0.0", "event": "startup"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+{"time": "2026-10-29T22:08:06+0000", "level": "INFO", "message": "request", "version": "1.0.0", "request_id": "f827ba0d-6241-423c-9ffe-35b0fefcd8db", "method": "GET", "path": "/healthz", "status": 200, "duration_ms": 2.39}
+{"time": "2026-10-29T22:08:21+0000", "level": "INFO", "message": "request", "version": "1.0.0", "request_id": "80729777-71a7-4ee6-adc9-3eda10950aee", "method": "GET", "path": "/version", "status": 200, "duration_ms": 1.15}
+$ docker images apex-ops-api
+IMAGE                ID             DISK USAGE   CONTENT SIZE
+apex-ops-api:1.0.0   3ae7c39f7939        236MB         57.4MB
+
+# CI-built image pulled anonymously from GHCR (package is public)
+$ docker logout ghcr.io
+$ docker pull ghcr.io/ifeoma-obinna23/apex-ops-api:1.0.0
+Digest: sha256:80cc6ac73d36e4de39be09947e78ff57279b4522fa567d7214495b8750b9cdfa
+Status: Downloaded newer image for ghcr.io/ifeoma-obinna23/apex-ops-api:1.0.0
+$ docker run --rm ghcr.io/ifeoma-obinna23/apex-ops-api:1.0.0 python -c "import os; print(os.environ['APP_VERSION'])"
+1.0.0

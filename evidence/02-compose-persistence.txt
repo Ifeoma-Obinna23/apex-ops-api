@@ -1,0 +1,33 @@
+# Docker Compose: API + Postgres, secrets from .env, persistent volume
+# Captured 2026-10-29
+
+$ git check-ignore .env && echo ".env is ignored by git - good"
+.env
+.env is ignored by git - good
+$ docker compose config --quiet && echo "compose file is valid"
+compose file is valid
+
+$ docker compose ps
+NAME         IMAGE                SERVICE   STATUS                    PORTS
+apex-api-1   apex-ops-api:1.0.0   api       Up 44 seconds (healthy)   127.0.0.1:8000->8000/tcp
+apex-db-1    postgres:17-alpine   db        Up 50 seconds (healthy)   5432/tcp
+# db has no published port (reachable only on the private network); api bound to 127.0.0.1
+
+$ curl -s localhost:8000/readyz
+{"status":"ready"}
+$ curl -s -X POST localhost:8000/tasks -H "Content-Type: application/json" -d '{"title":"Persist me","priority":"high"}'
+{"id":1,"title":"Persist me","priority":"high","status":"open"}
+
+$ docker compose down
+ ✔ Container apex-api-1  Removed
+ ✔ Container apex-db-1   Removed
+ ✔ Network apex_backend  Removed
+$ docker compose up -d
+ ✔ Network apex_backend  Created
+ ✔ Container apex-db-1   Healthy
+ ✔ Container apex-api-1  Started
+$ curl -s localhost:8000/tasks
+[{"id":1,"title":"Persist me","priority":"high","status":"open"}]
+$ docker volume ls | grep pgdata
+local     apex_pgdata
+# Containers were deleted and recreated; the task survived in the named volume.

@@ -1,0 +1,19 @@
+flowchart LR
+    dev([Developer]) -->|git push / tag vX.Y.Z| gh[GitHub repo]
+    gh --> ci
+    subgraph ci[GitHub Actions CI]
+        direction TB
+        t[Gate 1: test<br/>ruff lint + pytest] -->|pass| b[Gate 2: build<br/>docker build]
+        b --> s[Smoke test<br/>Compose + real Postgres]
+        s --> sc[Trivy scan<br/>block on fixable CRITICAL]
+        sc --> p[Publish image<br/>only on push]
+        t -.->|fail| stop([Release blocked<br/>no image built])
+    end
+    p --> reg[(GHCR<br/>apex-ops-api:1.0.0 / 1.1.0 / 1.2.0)]
+    reg -->|docker pull| deploy
+    subgraph host[Local host: WSL2 Ubuntu + Docker Engine]
+        deploy[scripts/deploy.sh<br/>scripts/rollback.sh] -->|sets API_TAG in .env| api
+        api[api container<br/>FastAPI, non-root, read-only<br/>/healthz /readyz /metrics] -->|private network| db[(db container<br/>Postgres 17)]
+        db --- vol[(volume<br/>apex_pgdata)]
+    end
+    user([curl / browser]) -->|127.0.0.1:8000| api

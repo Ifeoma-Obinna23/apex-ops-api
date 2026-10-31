@@ -1,0 +1,33 @@
+# Local test results
+
+## v1.0.0 (2026-10-29)
+$ ruff check app tests
+All checks passed!
+$ pytest -v
+tests/test_api.py::test_healthz_returns_ok PASSED
+tests/test_api.py::test_readyz_ready_when_store_is_up PASSED
+tests/test_api.py::test_readyz_returns_503_when_store_is_down PASSED
+tests/test_api.py::test_create_task_returns_201_and_the_task PASSED
+tests/test_api.py::test_created_task_can_be_fetched_by_id PASSED
+tests/test_api.py::test_unknown_task_returns_404 PASSED
+tests/test_api.py::test_invalid_priority_is_rejected_with_422 PASSED
+tests/test_api.py::test_empty_title_is_rejected_with_422 PASSED
+tests/test_api.py::test_metrics_exposes_request_counter PASSED
+tests/test_api.py::test_response_has_request_id_header PASSED
+tests/test_api.py::test_intentional_failure_demo SKIPPED (set FAIL_DEMO=1 to run the failure demo)
+10 passed, 1 skipped
+
+$ FAIL_DEMO=1 pytest -q
+..........F
+E       AssertionError: Intentional failure: CI must block the release
+E       assert {'status': 'ok'} == {'status': 'this-will-never-match'}
+FAILED tests/test_api.py::test_intentional_failure_demo
+1 failed, 10 passed
+
+## v1.2.0 (2026-10-30): added close-task test (1.1.0) and unhandled-error test (1.2.0)
+$ ruff check app tests && pytest -q
+All checks passed!
+..........s..
+12 passed, 1 skipped
+
+# Note: the DeprecationWarning about anyio comes from the Starlette test client library, not this code.

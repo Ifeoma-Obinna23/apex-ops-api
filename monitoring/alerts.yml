@@ -1,0 +1,39 @@
+# Proposed Prometheus alert rules for the Apex Operations API.
+# Not deployed in this exercise (no paid or extra infrastructure); thresholds to be tuned on real traffic.
+groups:
+  - name: apex-ops-api
+    rules:
+      - alert: ApiDown
+        expr: up{job="apex-ops-api"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "Apex Operations API is not responding to scrapes"
+          runbook: "docs/RUNBOOK.md#3-incident-response"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="apex-ops-api",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="apex-ops-api"}[5m])) > 0.05
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "More than 5% of requests are failing with 5xx"
+          runbook: "docs/RUNBOOK.md#3-incident-response"
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{job="apex-ops-api"}[5m]))) > 0.5
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "95th percentile latency above 500 ms"
+
+      - alert: NotReady
+        expr: probe_success{job="apex-ops-api-readyz"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "/readyz failing: a dependency (database) is unavailable"
+          runbook: "docs/RUNBOOK.md#example-database-unavailable-drill-performed-see-evidence05"

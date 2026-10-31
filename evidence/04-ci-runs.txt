@@ -1,0 +1,44 @@
+# CI evidence: https://github.com/Ifeoma-Obinna23/apex-ops-api/actions
+
+## Green release run (v1.2.0), run 41121092675
+✓ test in 17s
+  ✓ Lint (ruff)  ✓ Run tests  ✓ Upload test results
+✓ build in 1m1s
+  ✓ Work out image name and version
+  ✓ Build image
+  ✓ Smoke test with Docker Compose (real Postgres)
+  - Show logs if the smoke test failed        (skipped: nothing failed)
+  ✓ Clean up smoke test
+  ✓ Scan image (report HIGH and CRITICAL)
+  ✓ Scan gate (fail on fixable CRITICAL)
+  ✓ Publish to GitHub Container Registry
+✓ Run CI (41121092675) completed with 'success'
+
+## Intentional failure blocks the release, run 41110411363 (workflow_dispatch, fail_demo=true)
+X test in 14s
+  ✓ Lint (ruff)
+  X Run tests
+  ✓ Upload test results       (if: always, report kept)
+- build                       (skipped: never started, nothing built or published)
+
+$ gh run view 41110411363 --log-failed | grep -E "FAILED|passed|failed"
+FAILED tests/test_api.py::test_intentional_failure_demo - AssertionError: Intentional failure: CI must block the release
+=================== 1 failed, 11 passed, 1 warning in 0.45s ====================
+
+## Real CI failure investigated: publish denied, run 40971150725
+X build: Publish to GitHub Container Registry
+$ gh run view 40971150725 --log-failed | tail
+... 6fc242d221a6: Pushed
+error from registry: denied
+##[error]Process completed with exit code 1.
+# Login and layer upload succeeded; final manifest write denied -> repository lacked write access to the package.
+# Fix: package "Manage Actions access" -> repo Write; repo Settings > Actions > Workflow permissions -> Read and write.
+$ gh run rerun 40971150725 --failed
+✓ Publish to GitHub Container Registry
+✓ Run CI (40971150725) completed with 'success'
+
+## Releases
+$ gh run list --workflow=ci.yml
+✓  CI  v1.0.0  push  40974156369
+✓  CI  v1.1.0  push  40975225760
+✓  CI  v1.2.0  push  41121092675

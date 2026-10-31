@@ -1,0 +1,49 @@
+# Versioned release, deploy, rollback, refused unknown version
+# Captured 2026-10-30. All images pulled from GHCR (built by CI). Times in deploy.log are UTC.
+
+## Switch to CI-built 1.0.0
+$ docker compose ps
+apex-api-1   ghcr.io/ifeoma-obinna23/apex-ops-api:1.0.0   api   29 seconds ago   Up 26 seconds (healthy)
+apex-db-1    postgres:17-alpine                           db    6 hours ago      Up 6 hours (healthy)
+# only the API container was replaced; the database kept running
+$ curl -s localhost:8000/version
+{"version":"1.0.0"}
+
+## Deploy 1.1.0 and use its new feature
+$ ./scripts/deploy.sh 1.1.0
+$ curl -s -X POST localhost:8000/tasks/1/close
+{"id":1,"title":"Persist me","priority":"high","status":"closed"}
+
+## Roll back to 1.0.0
+$ ./scripts/rollback.sh
+$ curl -s localhost:8000/tasks
+[{"id":1,"title":"Persist me","priority":"high","status":"closed"}]     <- data written by 1.1.0 still readable
+$ curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8000/tasks/1/close
+404                                                                     <- endpoint absent: 1.0.0 code is running
+
+## Unknown version is refused
+$ ./scripts/deploy.sh 9.9.9      (pull fails: version never published)
+$ curl -s localhost:8000/version
+{"version":"1.0.0"}                                                     <- service unchanged
+
+## Audit trail
+$ cat deploy.log
+2026-10-30T04:36:02Z deploy requested: 1.0.0 -> 1.0.0 (ghcr.io/ifeoma-obinna23/apex-ops-api)
+2026-10-30T04:36:13Z deploy OK: now running 1.0.0 (previous: 1.0.0)
+2026-10-30T04:38:40Z deploy requested: 1.0.0 -> 1.1.0 (ghcr.io/ifeoma-obinna23/apex-ops-api)
+2026-10-30T04:38:56Z deploy OK: now running 1.1.0 (previous: 1.0.0)
+2026-10-30T04:40:31Z deploy requested: 1.1.0 -> 1.0.0 (ghcr.io/ifeoma-obinna23/apex-ops-api)
+2026-10-30T04:40:40Z deploy OK: now running 1.0.0 (previous: 1.1.0)          <- rollback: 9 s
+2026-10-30T08:05:38Z deploy requested: 1.0.0 -> 9.9.9 (ghcr.io/ifeoma-obinna23/apex-ops-api)   <- stopped at pull
+
+## Deploy 1.2.0 (full output)
+$ ./scripts/deploy.sh 1.2.0
+2026-10-30T20:20:08Z deploy requested: 1.0.0 -> 1.2.0 (ghcr.io/ifeoma-obinna23/apex-ops-api)
+1.2.0: Pulling from ifeoma-obinna23/apex-ops-api
+Digest: sha256:98720f0ff766d5c62e588e0db2e215357f227681aadd137cfd709eeb199c34eb
+Status: Downloaded newer image for ghcr.io/ifeoma-obinna23/apex-ops-api:1.2.0
+ ✔ Container apex-db-1   Healthy
+ ✔ Container apex-api-1  Healthy
+2026-10-30T20:20:25Z deploy OK: now running 1.2.0 (previous: 1.0.0)          <- deploy: 17 s
+$ curl -s localhost:8000/version
+{"version":"1.2.0"}
